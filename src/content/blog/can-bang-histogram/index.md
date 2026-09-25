@@ -19,23 +19,22 @@ tags:
 readingTime: "10 min read"
 ---
 
-Trong xử lý ảnh số và thị giác máy tính, độ tương phản (contrast) đóng vai trò quyết định đến chất lượng trích xuất đặc trưng và khả năng quan sát của con người. Một bức ảnh chụp thiếu sáng, ngược sáng hoặc có dải sáng phân bố hẹp thường khiến các chi tiết quan trọng bị chìm vào bóng tối hoặc chói lóa.
+Trong xử lý ảnh số và thị giác máy tính, độ tương phản đóng vai trò quyết định đến chất lượng trích xuất đặc trưng và khả năng quan sát của con người. Một bức ảnh chụp thiếu sáng, ngược sáng hoặc có dải sáng phân bố hẹp thường khiến các chi tiết quan trọng bị chìm vào bóng tối hoặc chói lóa.
 
-Cân bằng histogram (Histogram Equalization) là nhóm kỹ thuật cơ bản và hiệu quả nhất nhằm kéo giãn dải cường độ sáng của ảnh, giúp nâng cao độ tương phản mà vẫn bảo toàn cấu trúc nội dung. Bài viết này sẽ đi sâu vào nguyên lý hoạt động, công thức toán học và cách triển khai từ đầu (from scratch) ba thuật toán kinh điển: **HE (Histogram Equalization)**, **AHE (Adaptive Histogram Equalization)** và **CLAHE (Contrast Limited Adaptive Histogram Equalization)**.
+Cân bằng histogram (histogram equalization) là nhóm kỹ thuật cơ bản và hiệu quả nhằm kéo giãn dải cường độ sáng của ảnh, giúp nâng cao độ tương phản mà vẫn bảo toàn cấu trúc nội dung của ảnh. Bài viết này sẽ đi sâu vào nguyên lý hoạt động, công thức toán học và cách triển khai từ đầu ba thuật toán kinh điển: **HE (Histogram Equalization)**, **AHE (Adaptive Histogram Equalization)** và **CLAHE (Contrast Limited Adaptive Histogram Equalization)**.
 
 ---
 
 ## 1. Histogram Equalization (HE)
 
 ### Khái niệm và mục tiêu
-**Histogram Equalization (HE)** là kỹ thuật cân bằng lược đồ toàn cục (Global). Khi một bức ảnh có các giá trị điểm ảnh chỉ tập trung trong một khoảng hẹp (ví dụ toàn bộ mức xám nằm trong đoạn $[50, 100]$ thay vì trải đều $[0, 255]$), ảnh sẽ có độ tương phản rất thấp. 
+**Histogram Equalization (HE)** là kỹ thuật cân bằng lược đồ toàn cục. Khi một bức ảnh có các giá trị điểm ảnh chỉ tập trung trong một khoảng hẹp (ví dụ toàn bộ mức xám nằm trong đoạn $[50, 100]$ thay vì trải đều $[0, 255]$), ảnh sẽ có độ tương phản rất thấp. 
 
-Mục tiêu của HE là tìm một hàm chuyển đổi cường độ $s = T(r)$ để biến đổi phân bố mức xám ban đầu thành một phân bố xác suất đều (Uniform Distribution) trên toàn bộ dải giá trị $[0, L-1]$ (thông thường với ảnh 8-bit thì $L = 256$).
+Mục tiêu của HE là tìm một hàm chuyển đổi cường độ $s = T(r)$ để biến đổi phân bố mức xám ban đầu thành một phân bố xác suất đều trên toàn bộ dải giá trị $[0, L-1]$ (thông thường với ảnh 8-bit thì $L = 256$).
 
 HE được ứng dụng rộng rãi trong xử lý ảnh vệ tinh, nâng cao chất lượng ảnh chụp X-quang, MRI và tiền xử lý cho các bài toán phân đoạn ảnh y tế.
-
 ### Nguyên lý toán học
-Cho bức ảnh xám đầu vào có kích thước $H \times W$ với tổng số pixel $N = H \times W$, mức xám $r_k \in [0, L-1]$:
+Cho bức **ảnh xám** đầu vào có kích thước $H \times W$ với tổng số pixel $N = H \times W$, mức xám $r_k \in [0, L-1]$:
 
 1. **Hàm mật độ xác suất (Probability Density Function - PDF):**
    $$p_r(r_k) = \frac{n_k}{N}$$
@@ -104,22 +103,21 @@ equalized_gray = cv2.equalizeHist(img_gray)
 ![So sánh ảnh gốc và ảnh sau khi cân bằng Histogram toàn cục (HE)](./he-result.png)
 
 ### Hạn chế của HE toàn cục
-Vì HE áp dụng một hàm ánh xạ duy nhất cho toàn bộ bức ảnh, nó giả định mọi vùng trong ảnh đều cần tăng cường tương đương nhau. Khi ảnh có nền quá sáng hoặc quá tối so với chủ thể, HE toàn cục sẽ làm mất chi tiết ở các vùng cục bộ hoặc làm ảnh bị "cháy sáng" (washed out).
+Vì HE áp dụng một hàm ánh xạ duy nhất cho toàn bộ bức ảnh, nó giả định mọi vùng trong ảnh đều cần tăng cường tương đương nhau. Khi ảnh có nền quá sáng hoặc quá tối so với chủ thể, HE toàn cục sẽ làm mất chi tiết ở các vùng cục bộ hoặc làm ảnh bị cháy sáng.
 
 ---
 
 ## 2. Adaptive Histogram Equalization (AHE)
-
 ### Đặt vấn đề
 Để khắc phục nhược điểm của HE toàn cục khi ảnh có độ chiếu sáng không đồng đều (vừa có vùng quá tối, vừa có vùng quá sáng), **Adaptive Histogram Equalization (AHE)** được đề xuất.
 
 Thay vì dùng 1 biểu đồ histogram duy nhất cho toàn bộ bức ảnh, AHE chia nhỏ ảnh thành các vùng cục bộ (local neighborhoods) và tính toán hàm chuyển đổi độ tương phản độc lập cho từng điểm ảnh dựa trên vùng lân cận quanh nó.
 
-### Cơ chế hoạt động (Sliding Window)
+### Cơ chế hoạt động
 1. Duyệt qua từng điểm ảnh $(x, y)$ trên bức ảnh.
 2. Trích xuất một cửa sổ lân cận kích thước $W \times W$ (ví dụ: $31 \times 31$ hoặc $65 \times 65$) với điểm ảnh $(x, y)$ làm tâm.
 3. Tính toán histogram cục bộ $\text{hist}_{\text{local}}$ và hàm phân phối tích lũy (CDF) chỉ riêng bên trong cửa sổ $W \times W$.
-4. Tính mức sáng mới cho điểm ảnh $(x, y)$ dựa trên thứ hạng (rank) của nó trong cửa sổ cục bộ:
+4. Tính mức sáng mới cho điểm ảnh $(x, y)$ dựa trên thứ hạng của nó trong cửa sổ:
 
 $$m(x, y) = \text{round}\left( \frac{255}{W \times W} \times \sum_{k=0}^{f(x, y)} \text{hist}_{\text{local}}[k] \right)$$
 
@@ -127,8 +125,7 @@ $$m(x, y) = \text{round}\left( \frac{255}{W \times W} \times \sum_{k=0}^{f(x, y)
 
 * **Ưu điểm**: Nâng cao chi tiết cục bộ vượt trội tại các vùng bị chìm trong bóng tối hoặc bị lóa sáng mà phương pháp toàn cục không xử lý được.
 * **Nhược điểm**:
-  * **Khuếch đại nhiễu cực mạnh tại các vùng đồng nhất (flat regions)**: Tại các vùng đồng màu (như bầu trời, mảng tường phẳng, da mịn), tất cả các pixel đều có giá trị gần như nhau. Histogram cục bộ sẽ tạo thành một đỉnh cực kỳ nhọn tập trung ở một dải hẹp.
-  
+  * **Khuếch đại nhiễu cực mạnh tại các vùng đồng nhất**: Tại các vùng đồng màu như bầu trời, mảng tường phẳng, da mịn, tất cả các pixel đều có giá trị gần như nhau. Histogram cục bộ sẽ tạo thành một đỉnh cực kỳ nhọn tập trung ở một dải hẹp.
   ![Hiện tượng biểu đồ phân bố nhọn tại vùng đồng nhất dẫn đến khuếch đại nhiễu](./ahe-noise-histogram.png)
 
   Khi chuẩn hóa và cân bằng, dải hẹp này bị "kéo giãn" cưỡng bức ra toàn dải $[0, 255]$, biến các dao động nhiễu ngẫu nhiên li ti thành các đốm hạt lớn rõ rệt.
@@ -179,9 +176,9 @@ def manual_ahe(img_gray: np.ndarray, window_size: int = 33) -> np.ndarray:
 
 ## 3. Contrast Limited Adaptive Histogram Equalization (CLAHE)
 
-**CLAHE** là phiên bản cải tiến toàn diện của AHE, được thiết kế để giải quyết triệt để vấn đề khuếch đại nhiễu và tối ưu hóa tốc độ thực thi. Thuật toán bổ sung cơ chế giới hạn độ tương phản (Clip Limit) và phân phối lại phần dư, kết hợp cùng kỹ thuật chia ô lưới và nội suy song tuyến tính (Bilinear Interpolation).
+**CLAHE** là phiên bản cải tiến toàn diện của AHE, được thiết kế để giải quyết triệt để vấn đề khuếch đại nhiễu và tối ưu hóa tốc độ thực thi. Thuật toán bổ sung cơ chế giới hạn độ tương phản và phân phối lại phần dư, kết hợp cùng kỹ thuật chia ô lưới và nội suy song tuyến tính.
 
-Nhờ tính ổn định và kiểm soát nhiễu tốt, CLAHE là thuật toán tiêu chuẩn vàng trong y tế (ảnh X-ray, CT, võng mạc) và tiền xử lý ảnh cho các mạng Deep Learning.
+Nhờ tính ổn định và kiểm soát nhiễu tốt, CLAHE là thuật toán khá tốt trong y tế (ảnh X-ray, CT, võng mạc) và tiền xử lý ảnh cho các mạng Deep Learning.
 
 ```mermaid
 flowchart LR
@@ -195,15 +192,14 @@ flowchart LR
 
 ### Chi tiết 4 bước của thuật toán CLAHE
 
-#### Bước 1: Chia lưới ảnh (Grid Division / Tiling)
-Ảnh được chia thành các ô chữ nhật nhỏ không chồng lấn, gọi là các **tiles** (kích thước phổ biến là $8 \times 8$ ô). Mỗi tile sẽ được tính toán biểu đồ histogram độc lập.
+#### Bước 1: Chia lưới ảnh
+Ảnh được chia thành các ô chữ nhật nhỏ không chồng lấn, gọi là các **tiles** với kích thước phổ biến là $8 \times 8$. Mỗi tile sẽ được tính toán biểu đồ histogram độc lập.
 
-#### Bước 2: Giới hạn độ tương phản (Contrast Limiting / Clipping)
+#### Bước 2: Giới hạn độ tương phản
 Để ngăn chặn việc tạo đỉnh quá nhọn ở vùng đồng màu, thuật toán đặt ra một ngưỡng cắt trần gọi là `clipLimit`. 
 - Nếu một bin histogram nào vượt ngưỡng này, phần chiều cao vượt ngưỡng sẽ bị cắt bỏ.
-- Tổng số lượng pixel bị cắt không bị hủy bỏ, mà được **chia đều lại (redistributed)** cho tất cả các bin khác trong tile đó.
+- Tổng số lượng pixel bị cắt không bị hủy bỏ, mà được **chia đều lại** cho tất cả các bin khác trong tile đó.
 - Nhờ đó, độ dốc của hàm CDF được khống chế, triệt tiêu hoàn toàn hiện tượng khuếch đại nhiễu.
-
 #### Bước 3: Tính toán hàm chuyển đổi (CDF Transformation)
 Sau khi phân phối lại, hàm phân phối tích lũy được tính toán cho từng tile:
 
@@ -276,10 +272,10 @@ def enhance_color_image_clahe(image_path: str, clip_limit: float = 2.0, tile_gri
 
 ## 5. Tổng kết và so sánh các phương pháp
 
-| Tiêu chí | HE | AHE | CLAHE |
-| :--- | :--- | :--- | :--- |
-| **Phạm vi xử lý** | Toàn cục | Cục bộ qua Sliding Window | Cục bộ qua Tile Grid + Nội suy song tuyến tính |
-| **Khả năng tăng chi tiết** | Kém ở các vùng sáng/tối cục bộ | Rất cao | Rất cao |
-| **Kiểm soát nhiễu** | Trung bình | Kém | Rất tốt |
-| **Tốc độ tính toán** | Rất nhanh  | Rất chậm | Rất nhanh |
-| **Ứng dụng tiêu biểu** | Ảnh vệ tinh, tiền xử lý nhanh | Thử nghiệm lý thuyết | Ảnh y tế (X-ray, CT), tiền xử lý Deep Learning, Camera ISP |
+| Tiêu chí                   | HE                             | AHE                       | CLAHE                                          |
+| :------------------------- | :----------------------------- | :------------------------ | :--------------------------------------------- |
+| **Phạm vi xử lý**          | Toàn cục                       | Cục bộ qua Sliding Window | Cục bộ qua Tile Grid + Nội suy song tuyến tính |
+| **Khả năng tăng chi tiết** | Kém ở các vùng sáng/tối cục bộ | Rất cao                   | Rất cao                                        |
+| **Kiểm soát nhiễu**        | Trung bình                     | Kém                       | Rất tốt                                        |
+| **Tốc độ tính toán**       | Rất nhanh                      | Rất chậm                  | Rất nhanh                                      |
+| **Ứng dụng tiêu biểu**     | Ảnh vệ tinh, tiền xử lý nhanh  | Thử nghiệm lý thuyết      | Ảnh y tế, tiền xử lý Deep Learning, Camera ISP |
